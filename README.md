@@ -29,7 +29,6 @@ The setup looks like the following:
 |`create_s3_resources.yml`|N/A|Create required S3 resources.|
 |`delete_s3_resources.yml`|N/A|Delete S3 resources created in `create_s3_resources` playbook.|
 |`create_aac_vm.yml`|[roles.aac](roles/aac/README.md)|Create an AWS instance and set up Ansible Automation Controller.|
-|`create_aac_demo.yml`|N/A|Create the Demo environment on Ansible Automation Controller.|
 |`delete_aac_vm.yml`|N/A|Delete the instance created in `create_aac_vm` playbook.|
 |`create_builder_vm.yml`|[roles.builder](roles/builder/README.md)|Create an AWS instance and set up builder server.|
 |`delete_builder_vm.yml`|N/A|Delete the instance created in `create_builder_vm` playbook.|
