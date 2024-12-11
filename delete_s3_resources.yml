@@ -1,0 +1,40 @@
+---
+- name: Delete the S3 bucket and realted resources
+  hosts: localhost
+  gather_facts: false
+  vars:
+    aws_region: "{{ lookup('env', 'AWS_DEFAULT_REGION') }}"
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - aws_region is defined
+          - aws_s3_bucket is defined
+          - aws_iam_role is defined
+        fail_msg: "Required variables not set"
+
+    - name: Get the S3 info
+      amazon.aws.s3_bucket_info:
+        region: "{{ aws_region }}"
+        name: "{{ aws_s3_bucket }}"
+      register: s3_results
+
+    - name: Delete the S3 bucket
+      amazon.aws.s3_bucket:
+        name: "{{ aws_s3_bucket }}"
+        state: absent
+        region: "{{ aws_region }}"
+      when: s3_results.buckets is defined and (s3_results.buckets | length > 0)
+
+    - name: Get the role info
+      amazon.aws.iam_role_info:
+        region: "{{ aws_region }}"
+        name: "{{ aws_iam_role }}"
+      register: role_results
+
+    - name: Delete the role
+      amazon.aws.iam_role:
+        name: "{{ aws_iam_role }}"
+        state: absent
+      when: role_results.iam_roles is defined and (role_results.iam_roles | length > 0)

@@ -1,0 +1,41 @@
+---
+- name: Create a S3 bucket and realted resources
+  hosts: localhost
+  gather_facts: false
+  vars:
+    aws_region: "{{ lookup('env', 'AWS_DEFAULT_REGION') }}"
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - aws_region is defined
+          - aws_s3_bucket is defined
+          - aws_iam_role is defined
+          - aws_iam_policy is defined
+          - purpose is defined
+        fail_msg: "Required variables not set"
+
+    - name: Create a S3 bucket
+      amazon.aws.s3_bucket:
+        name: "{{ aws_s3_bucket }}"
+        state: present
+        region: "{{ aws_region }}"
+        tags:
+          purpose: "{{ purpose }}"
+
+    - name: Create a role
+      amazon.aws.iam_role:
+        name: "{{ aws_iam_role }}"
+        assume_role_policy_document: "{{ lookup('file', 'aws-role.json') }}"
+        state: present
+        tags:
+          purpose: "{{ purpose }}"
+
+    - name: Associate a policy to the role
+      amazon.aws.iam_policy:
+        iam_type: "role"
+        iam_name: "{{ aws_iam_role }}"
+        policy_name: "{{ aws_iam_policy }}"
+        policy_json: "{{ lookup('file', 'aws-policy.json') }}"
+        state: present

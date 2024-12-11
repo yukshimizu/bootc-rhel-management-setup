@@ -1,0 +1,23 @@
+---
+aws_vpc: demo_vpc
+aws_vpc_cidr_block: 10.0.0.0/16 # adjust with your preference
+aws_vpc_subnet_name: demo_subnet
+aws_subnet_cidr_block: 10.0.1.0/24 # adjust with your preference
+aws_igw_name: demo_gtw
+aws_routetable_name: demo_rtb
+aws_securitygroup_name: demo_sg
+aws_s3_bucket: rhel9-bootc
+aws_iam_role: vmimport # requires to align with aws-role.json
+aws_iam_policy: vmimport # requires to align with aws-policy.json
+
+purpose: demo
+
+aws_builder_instance_ami: ami-07c8a8c166f570f4a # ami of RHEL-9.4_HVM_GA-20240827-x86_64-0-Access2-GP3
+aws_builder_instance_size: t2.medium # can be bigger instance size
+aws_aac_instance_ami: ami-07c8a8c166f570f4a # ami of RHEL-9.4_HVM_GA-20240827-x86_64-0-Access2-GP3
+aws_aac_instance_size: t2.xlarge # should not be modified
+
+aac_vm_type: aac # should not be modified
+aac_vm_name: aac01
+builder_vm_type: builder # should not be modified
+builder_vm_name: builder01

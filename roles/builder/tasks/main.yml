@@ -1,0 +1,46 @@
+---
+# tasks file for builder
+
+- name: Fail if variables not defined
+  ansible.builtin.assert:
+    that:
+      - rhsm_username
+      - rhsm_passwd
+    fail_msg: "Required variables not set"
+
+- name: Register to Red Hat Subscription Management
+  redhat.rhel_system_roles.redhat_subscription:
+    state: present
+    username: "{{ rhsm_username }}"
+    password: "{{ rhsm_passwd }}"
+  become: true
+
+- name: Patch rhsm config
+  ansible.builtin.command: subscription-manager config --rhsm.manage_repos=1
+  become: true
+  register: cmd_output
+  changed_when: cmd_output.rc == 0
+
+- name: Refresh rhsm config
+  ansible.builtin.command: subscription-manager refresh
+  become: true
+  register: cmd_output
+  changed_when: cmd_output.rc == 0
+  notify: Dnf clean
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+
+- name: Install container-tools packages
+  ansible.builtin.dnf:
+    name:
+      - container-tools
+    state: present
+  become: true
+
+- name: Update all packages
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+    update_only: true
+  become: true
