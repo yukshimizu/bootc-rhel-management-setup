@@ -12,7 +12,7 @@ This repo includes ansible playbooks and roles for setting up [a demo environmen
 
 The setup looks like the following:
 
-![](bootc-rhel-management-setup.png)
+<img width="916" alt="bootc-rhel-management-setup" src="https://github.com/user-attachments/assets/2de2240e-900c-416c-bcbb-bddc8bc94d2c">
 
 ## Included contents
 ### Roles
