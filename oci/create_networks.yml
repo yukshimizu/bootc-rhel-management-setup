@@ -1,0 +1,173 @@
+---
+- name: Create OCI Network Resources (VCN, Subnet, IGW, Route Table, Security List)
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - oci_region is defined and oci_region | length > 0
+          - oci_compartment_id is defined
+          - oci_vcn_name is defined
+          - oci_vcn_cidr_block is defined
+          - oci_subnet_name is defined
+          - oci_subnet_cidr_block is defined
+          - oci_igw_name is defined
+          - oci_routetable_name is defined
+          - oci_securitylist_name is defined
+          - purpose is defined
+        fail_msg: "Required variables not set"
+
+    - name: Create a VCN
+      oracle.oci.oci_network_vcn:
+        compartment_id: "{{ oci_compartment_id }}"
+        display_name: "{{ oci_vcn_name }}"
+        cidr_block: "{{ oci_vcn_cidr_block }}"
+        dns_label: "{{ oci_vcn_name | replace('-', '') | replace('_', '') | truncate(15, True, '') }}"
+        freeform_tags:
+          purpose: "{{ purpose }}"
+        state: present
+        region: "{{ oci_region }}"
+      register: vcn_result
+
+    - name: Set vcn_id fact
+      ansible.builtin.set_fact:
+        vcn_id: "{{ vcn_result.vcn.id }}"
+
+    - name: Create Internet Gateway
+      oracle.oci.oci_network_internet_gateway:
+        compartment_id: "{{ oci_compartment_id }}"
+        vcn_id: "{{ vcn_id }}"
+        display_name: "{{ oci_igw_name }}"
+        is_enabled: true
+        freeform_tags:
+          purpose: "{{ purpose }}"
+        state: present
+        region: "{{ oci_region }}"
+      register: igw_result
+
+    - name: Set igw_id fact
+      ansible.builtin.set_fact:
+        igw_id: "{{ igw_result.internet_gateway.id }}"
+
+    - name: Create Security List
+      oracle.oci.oci_network_security_list:
+        compartment_id: "{{ oci_compartment_id }}"
+        vcn_id: "{{ vcn_id }}"
+        display_name: "{{ oci_securitylist_name }}"
+        freeform_tags:
+          purpose: "{{ purpose }}"
+        ingress_security_rules:
+          - protocol: "6"   # TCP
+            source: "0.0.0.0/0"
+            tcp_options:
+              destination_port_range:
+                min: 22
+                max: 22
+            is_stateless: false
+          - protocol: "6"
+            source: "0.0.0.0/0"
+            tcp_options:
+              destination_port_range:
+                min: 80
+                max: 80
+            is_stateless: false
+          - protocol: "6"
+            source: "0.0.0.0/0"
+            tcp_options:
+              destination_port_range:
+                min: 443
+                max: 443
+            is_stateless: false
+          - protocol: "6"
+            source: "0.0.0.0/0"
+            tcp_options:
+              destination_port_range:
+                min: 5910
+                max: 5930
+            is_stateless: false
+          - protocol: "6"
+            source: "0.0.0.0/0"
+            tcp_options:
+              destination_port_range:
+                min: 8000
+                max: 8000
+            is_stateless: false
+          - protocol: "6"
+            source: "0.0.0.0/0"
+            tcp_options:
+              destination_port_range:
+                min: 8140
+                max: 8140
+            is_stateless: false
+          - protocol: "6"
+            source: "0.0.0.0/0"
+            tcp_options:
+              destination_port_range:
+                min: 8443
+                max: 8443
+            is_stateless: false
+          - protocol: "6"
+            source: "0.0.0.0/0"
+            tcp_options:
+              destination_port_range:
+                min: 9000
+                max: 9000
+            is_stateless: false
+        egress_security_rules:
+          - protocol: all
+            destination: "0.0.0.0/0"
+            is_stateless: false
+        state: present
+        region: "{{ oci_region }}"
+      register: seclist_result
+
+    - name: Set seclist_id fact
+      ansible.builtin.set_fact:
+        seclist_id: "{{ seclist_result.security_list.id }}"
+
+    - name: Create Route Table
+      oracle.oci.oci_network_route_table:
+        compartment_id: "{{ oci_compartment_id }}"
+        vcn_id: "{{ vcn_id }}"
+        display_name: "{{ oci_routetable_name }}"
+        freeform_tags:
+          purpose: "{{ purpose }}"
+        route_rules:
+          - destination: "0.0.0.0/0"
+            destination_type: CIDR_BLOCK
+            network_entity_id: "{{ igw_id }}"
+        state: present
+        region: "{{ oci_region }}"
+      register: rt_result
+
+    - name: Set route_table_id fact
+      ansible.builtin.set_fact:
+        route_table_id: "{{ rt_result.route_table.id }}"
+
+    - name: Create public subnet
+      oracle.oci.oci_network_subnet:
+        compartment_id: "{{ oci_compartment_id }}"
+        vcn_id: "{{ vcn_id }}"
+        display_name: "{{ oci_subnet_name }}"
+        cidr_block: "{{ oci_subnet_cidr_block }}"
+        dns_label: "{{ oci_subnet_name | replace('-', '') | replace('_', '') | truncate(15, True, '') }}"
+        route_table_id: "{{ route_table_id }}"
+        security_list_ids:
+          - "{{ seclist_id }}"
+        prohibit_public_ip_on_vnic: false
+        freeform_tags:
+          purpose: "{{ purpose }}"
+        state: present
+        region: "{{ oci_region }}"
+      register: subnet_result
+
+    - name: Print network summary
+      ansible.builtin.debug:
+        msg:
+          - "VCN ID:          {{ vcn_id }}"
+          - "IGW ID:          {{ igw_id }}"
+          - "Security List ID: {{ seclist_id }}"
+          - "Route Table ID:  {{ route_table_id }}"
+          - "Subnet ID:       {{ subnet_result.subnet.id }}"

@@ -1,15 +1,17 @@
-Role Name
+builder
 =========
 
-This role "builder" is designed to create a builder VM on AWS EC2 for demo purpose.
+This role "builder" is designed to create a builder VM for demo purpose.
 
 Requirements
 ------------
 
-Basically, the role assumes to setup a builder VM using Red Hat Cloud Access Gold Images on AWS EC2. 
+Basically, the role assumes to setup a builder VM using using the following RHEL images.
+
 
 The tested environment:
 - RHEL-9.4_HVM_GA-20240827-x86_64-0-Access2-GP3
+- rhel-9.8-x86_64-kvm.qcow2
 
 
 Role Variables

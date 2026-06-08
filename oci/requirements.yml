@@ -1,0 +1,11 @@
+---
+collections:
+  # OCI collection
+  - name: oracle.oci
+    version: ">=4.0.0"
+
+  # AAC / AWX automation controller management
+  - name: awx.awx
+
+  # RHEL system roles
+  - name: redhat.rhel_system_roles

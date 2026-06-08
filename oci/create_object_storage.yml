@@ -1,0 +1,91 @@
+---
+# In OCI, S3 is replaced by Object Storage (which is also S3-compatible).
+# The IAM role/policy equivalent is a Dynamic Group + Policy statement
+# that allows instances to manage objects in the bucket.
+#
+# Prerequisites: you must have OCI CLI / SDK configured, and the
+# dynamic group + policy JSON files placed in the files/ directory:
+#   files/oci-dynamic-group.json   (optional – can be created inline)
+#   files/oci-policy.json          (optional – can be created inline)
+
+- name: Create OCI Object Storage Bucket and IAM Resources
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - oci_region is defined and oci_region | length > 0
+          - oci_compartment_id is defined
+          - oci_tenancy_id is defined
+          - oci_object_storage_namespace is defined
+          - oci_bucket_name is defined
+          - oci_dynamic_group_name is defined
+          - oci_policy_name is defined
+          - purpose is defined
+        fail_msg: "Required variables not set"
+
+    # ---------------------------------------------------------------
+    # Object Storage bucket  (equivalent to S3 bucket)
+    # ---------------------------------------------------------------
+    - name: Create Object Storage bucket
+      oracle.oci.oci_object_storage_bucket:
+        compartment_id: "{{ oci_compartment_id }}"
+        namespace_name: "{{ oci_object_storage_namespace }}"
+        name: "{{ oci_bucket_name }}"
+        public_access_type: NoPublicAccess
+        freeform_tags:
+          purpose: "{{ purpose }}"
+        state: present
+        region: "{{ oci_region }}"
+      register: bucket_result
+
+    - name: Print bucket info
+      ansible.builtin.debug:
+        msg: "Bucket '{{ oci_bucket_name }}' created/confirmed in namespace '{{ oci_object_storage_namespace }}'."
+
+    # ---------------------------------------------------------------
+    # Dynamic Group  (equivalent to AWS IAM Role used by EC2)
+    # The matching rule selects all instances in the compartment that
+    # have been tagged with purpose = demo.
+    # ---------------------------------------------------------------
+    - name: Create Dynamic Group for builder instances
+      oracle.oci.oci_identity_dynamic_group:
+        compartment_id: "{{ oci_tenancy_id }}"   # dynamic groups live in the tenancy root
+        name: "{{ oci_dynamic_group_name }}"
+        description: "Instances allowed to read/write bootc object storage bucket"
+        matching_rule: >-
+          All {instance.compartment.id = '{{ oci_compartment_id }}',
+               tag.purpose.value = '{{ purpose }}'}
+        freeform_tags:
+          purpose: "{{ purpose }}"
+        state: present
+        region: "{{ oci_region }}"
+      register: dg_result
+
+    - name: Print dynamic group info
+      ansible.builtin.debug:
+        msg: "Dynamic Group '{{ oci_dynamic_group_name }}' id: {{ dg_result.dynamic_group.id }}"
+
+    # ---------------------------------------------------------------
+    # IAM Policy  (equivalent to AWS IAM Policy attached to vmimport role)
+    # Grants the dynamic group permission to manage objects in the bucket.
+    # ---------------------------------------------------------------
+    - name: Create IAM Policy for builder object storage access
+      oracle.oci.oci_identity_policy:
+        compartment_id: "{{ oci_tenancy_id }}"
+        name: "{{ oci_policy_name }}"
+        description: "Allow builder instances to manage objects in the bootc bucket"
+        statements:
+          - "Allow dynamic-group {{ oci_dynamic_group_name }} to manage objects in compartment id {{ oci_compartment_id }} where target.bucket.name='{{ oci_bucket_name }}'"
+          - "Allow dynamic-group {{ oci_dynamic_group_name }} to read buckets in compartment id {{ oci_compartment_id }}"
+        freeform_tags:
+          purpose: "{{ purpose }}"
+        state: present
+        region: "{{ oci_region }}"
+      register: policy_result
+
+    - name: Print policy info
+      ansible.builtin.debug:
+        msg: "IAM Policy '{{ oci_policy_name }}' created/confirmed."

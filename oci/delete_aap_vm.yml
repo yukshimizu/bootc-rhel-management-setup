@@ -1,0 +1,38 @@
+---
+- name: Delete AAP VM on OCI
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - oci_region is defined and oci_region | length > 0
+          - oci_compartment_id is defined
+          - aap_vm_name is defined
+        fail_msg: "Required variables not set"
+
+    - name: Get AAP instance info
+      oracle.oci.oci_compute_instance_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        display_name: "{{ aap_vm_name }}"
+        region: "{{ oci_region }}"
+      register: instance_facts
+
+    - name: Filter non-terminated instances
+      ansible.builtin.set_fact:
+        active_instances: >-
+          {{ instance_facts.instances | rejectattr('lifecycle_state', 'equalto', 'TERMINATED') | list }}
+
+    - name: Terminate AAP instance
+      oracle.oci.oci_compute_instance:
+        instance_id: "{{ item.id }}"
+        state: absent
+        preserve_boot_volume: false
+        region: "{{ oci_region }}"
+      loop: "{{ active_instances }}"
+      when: active_instances | length > 0
+
+    - name: Confirm deletion
+      ansible.builtin.debug:
+        msg: "AAP instance '{{ aap_vm_name }}' has been terminated."

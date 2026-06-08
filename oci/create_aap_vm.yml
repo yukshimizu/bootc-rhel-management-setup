@@ -1,0 +1,181 @@
+---
+- name: Create an AAP VM on OCI
+  hosts: localhost
+  gather_facts: false
+
+  vars_prompt:
+    - name: oci_ssh_public_key
+      prompt: "Enter the path to your OCI SSH public key file"
+      private: false
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - oci_region is defined and oci_region | length > 0
+          - oci_compartment_id is defined
+          - oci_subnet_name is defined
+          - oci_aap_instance_image_id is defined
+          - oci_aap_instance_shape is defined
+          - aap_vm_name is defined
+          - aap_vm_type is defined
+          - purpose is defined
+        fail_msg: "Required variables not set"
+
+    - name: Load SSH public key
+      ansible.builtin.set_fact:
+        ssh_public_key_content: "{{ lookup('file', oci_ssh_public_key) }}"
+
+    # ------------------------------------------------------------------
+    # Look up subnet OCID from its display name
+    # ------------------------------------------------------------------
+    - name: Get subnet info
+      oracle.oci.oci_network_subnet_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        display_name: "{{ oci_subnet_name }}"
+        region: "{{ oci_region }}"
+      register: subnet_facts
+
+    - name: Set subnet_id fact
+      ansible.builtin.set_fact:
+        subnet_id: "{{ subnet_facts.subnets[0].id }}"
+
+    # ------------------------------------------------------------------
+    # Check for an existing instance to avoid duplicates
+    # ------------------------------------------------------------------
+    - name: Check if the AAP VM is already provisioned
+      oracle.oci.oci_compute_instance_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        display_name: "{{ aap_vm_name }}"
+        region: "{{ oci_region }}"
+      register: existing_vm
+
+    - name: Filter running/stopped instances
+      ansible.builtin.set_fact:
+        active_instances: >-
+          {{ existing_vm.instances | selectattr('lifecycle_state', 'in',
+             ['PROVISIONING', 'RUNNING', 'STARTING', 'STOPPING', 'STOPPED']) | list }}
+
+    - name: Report existing instance
+      ansible.builtin.debug:
+        msg:
+          - "The AAP instance appears to be already provisioned. Please check the instance."
+          - "Instance OCID: {{ active_instances[0].id }}"
+      when: active_instances | length > 0
+
+    # ------------------------------------------------------------------
+    # Create the instance when it does not exist
+    # ------------------------------------------------------------------
+    - name: Create AAP Instance block
+      when: active_instances | length == 0
+      block:
+        - name: Create the OCI compute instance
+          oracle.oci.oci_compute_instance:
+            compartment_id: "{{ oci_compartment_id }}"
+            display_name: "{{ aap_vm_name }}"
+            availability_domain: "{{ oci_availability_domain }}"
+            shape: "{{ oci_aap_instance_shape }}"
+            shape_config: "{{ oci_aap_shape_config | default(omit) }}"   # required for Flex shapes
+            source_details:
+              source_type: image
+              image_id: "{{ oci_aap_instance_image_id }}"
+              boot_volume_size_in_gbs: 200
+            create_vnic_details:
+              subnet_id: "{{ subnet_id }}"
+              assign_public_ip: true
+              display_name: "{{ aap_vm_name }}-vnic"
+            metadata:
+              ssh_authorized_keys: "{{ ssh_public_key_content }}"
+            freeform_tags:
+              Name: "{{ aap_vm_name }}"
+              type: "{{ aap_vm_type }}"
+              purpose: "{{ purpose }}"
+            state: present
+            region: "{{ oci_region }}"
+          register: oci_instance
+
+        - name: Get VNIC attachments
+          oracle.oci.oci_compute_vnic_attachment_facts:
+            compartment_id: "{{ oci_compartment_id }}"
+            instance_id: "{{ oci_instance.instance.id }}"
+            region: "{{ oci_region }}"
+          register: vnic_attachments
+          until: vnic_attachments.vnic_attachments | length > 0
+          retries: 10
+          delay: 15
+
+        - name: Get VNIC details
+          oracle.oci.oci_network_vnic_facts:
+            vnic_id: "{{ vnic_attachments.vnic_attachments[0].vnic_id }}"
+            region: "{{ oci_region }}"
+          register: vnic_details
+
+        - name: Get subnet details (for DNS label)
+          oracle.oci.oci_network_subnet_facts:
+            subnet_id: "{{ vnic_details.vnic.subnet_id }}"
+            region: "{{ oci_region }}"
+          register: subnet_details
+
+        - name: Get VCN details (for DNS label)
+          oracle.oci.oci_network_vcn_facts:
+            vcn_id: "{{ subnet_details.subnets[0].vcn_id }}"
+            region: "{{ oci_region }}"
+          register: vcn_details
+
+        - name: Set public_ip and private_ip facts
+          ansible.builtin.set_fact:
+            instance_public_ip: "{{ vnic_details.vnic.public_ip }}"
+            instance_private_ip: "{{ vnic_details.vnic.private_ip }}"
+            instance_private_dns: >-
+              {{ vnic_details.vnic.hostname_label }}.{{ subnet_details.subnets[0].dns_label }}.{{ vcn_details.vcns[0].dns_label }}.oraclevcn.com
+
+        - name: Print instance IP addresses
+          ansible.builtin.debug:
+            msg:
+              - "Public IP for new AAP instance:  {{ instance_public_ip }}"
+              - "Private IP for new AAP instance: {{ instance_private_ip }}"
+              - "Private DNS: {{ instance_private_dns }}"
+
+        - name: Wait for SSH to be available
+          ansible.builtin.wait_for:
+            host: "{{ instance_public_ip }}"
+            port: 22
+            state: started
+            delay: 60
+            timeout: 300
+
+        - name: Add instance to the aap group
+          ansible.builtin.add_host:
+            name: "{{ instance_public_ip }}"
+            groups: aap
+
+        - name: Save private_dns_name use in the next play
+          ansible.builtin.set_fact:
+            private_dns_name: "{{ instance_private_dns }}"
+
+# -----------------------------------------------------------------------
+# Play 2: Configure the AAP server using the aap role
+# -----------------------------------------------------------------------
+- name: Configure AAP server
+  hosts: aap
+  gather_facts: true
+
+  vars:
+    aap_private_dns_name: "{{ hostvars.localhost.private_dns_name }}"
+
+  vars_prompt:
+    - name: rhsm_username
+      prompt: "What is your Red Hat login name?"
+      private: false
+
+    - name: rhsm_passwd
+      prompt: "What is your Red Hat login password?"
+
+    - name: aap_admin_passwd
+      prompt: "Enter your AAP admin password"
+
+    - name: aap_pg_passwd
+      prompt: "Enter your PostgreSQL password for AAP"
+
+  roles:
+    - aap

@@ -1,0 +1,102 @@
+---
+- name: Delete OCI Network Resources (Subnet, Security List, Route Table, IGW, VCN)
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - oci_region is defined and oci_region | length > 0
+          - oci_compartment_id is defined
+          - oci_vcn_name is defined
+          - oci_subnet_name is defined
+          - oci_igw_name is defined
+          - oci_routetable_name is defined
+          - oci_securitylist_name is defined
+        fail_msg: "Required variables not set"
+
+    - name: Get VCN info
+      oracle.oci.oci_network_vcn_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        display_name: "{{ oci_vcn_name }}"
+        region: "{{ oci_region }}"
+      register: vcn_facts
+
+    - name: End play if VCN not found
+      ansible.builtin.meta: end_play
+      when: vcn_facts.vcns | length == 0
+
+    - name: Set vcn_id fact
+      ansible.builtin.set_fact:
+        vcn_id: "{{ vcn_facts.vcns[0].id }}"
+
+    - name: Get Subnet info
+      oracle.oci.oci_network_subnet_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        vcn_id: "{{ vcn_id }}"
+        display_name: "{{ oci_subnet_name }}"
+        region: "{{ oci_region }}"
+      register: subnet_facts
+
+    - name: Delete Subnet
+      oracle.oci.oci_network_subnet:
+        subnet_id: "{{ subnet_facts.subnets[0].id }}"
+        state: absent
+        region: "{{ oci_region }}"
+      when: subnet_facts.subnets | length > 0
+
+    - name: Get Route Table info
+      oracle.oci.oci_network_route_table_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        vcn_id: "{{ vcn_id }}"
+        display_name: "{{ oci_routetable_name }}"
+        region: "{{ oci_region }}"
+      register: rt_facts
+
+    - name: Delete Route Table
+      oracle.oci.oci_network_route_table:
+        rt_id: "{{ rt_facts.route_tables[0].id }}"
+        state: absent
+        region: "{{ oci_region }}"
+      when: rt_facts.route_tables | length > 0
+
+    - name: Get Internet Gateway info
+      oracle.oci.oci_network_internet_gateway_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        vcn_id: "{{ vcn_id }}"
+        display_name: "{{ oci_igw_name }}"
+        region: "{{ oci_region }}"
+      register: igw_facts
+
+    - name: Delete Internet Gateway
+      oracle.oci.oci_network_internet_gateway:
+        ig_id: "{{ igw_facts.internet_gateways[0].id }}"
+        state: absent
+        region: "{{ oci_region }}"
+      when: igw_facts.internet_gateways | length > 0
+
+    - name: Get Security List info
+      oracle.oci.oci_network_security_list_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        vcn_id: "{{ vcn_id }}"
+        display_name: "{{ oci_securitylist_name }}"
+        region: "{{ oci_region }}"
+      register: seclist_facts
+
+    - name: Delete Security List
+      oracle.oci.oci_network_security_list:
+        security_list_id: "{{ seclist_facts.security_lists[0].id }}"
+        state: absent
+        region: "{{ oci_region }}"
+      when: seclist_facts.security_lists | length > 0
+
+    - name: Delete VCN
+      oracle.oci.oci_network_vcn:
+        vcn_id: "{{ vcn_id }}"
+        state: absent
+        region: "{{ oci_region }}"
+
+    - name: Confirm deletion
+      ansible.builtin.debug:
+        msg: "All OCI network resources for '{{ oci_vcn_name }}' have been deleted."

@@ -1,0 +1,27 @@
+# inventory/oci_inventory.oci.yml
+plugin: oracle.oci.oci
+
+# Authentication (uses ~/.oci/config by default)
+config_file: ~/.oci/config      # REQUIRED
+config_profile: DEFAULT
+
+# Scope: region and compartment
+regions:
+  - ap-tokyo-1
+
+compartments:
+  - compartment_ocid: "ocid1.tenancy.oc1..xxxx"    # REQUIRED
+    fetch_hosts_from_subcompartments: true
+
+# Only include RUNNING instances
+include_host_filters:
+  - "lifecycle_state == 'RUNNING'"
+
+# Set per-host variables from OCI instance attributes
+compose:
+  ansible_host: public_ip if public_ip else private_ip
+  instance_ocid: id
+  instance_name: display_name
+
+# Speed up queries with parallel processing
+enable_parallel_processing: true

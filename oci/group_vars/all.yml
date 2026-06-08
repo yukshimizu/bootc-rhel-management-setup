@@ -1,0 +1,46 @@
+---
+# =============================================================
+# OCI Environment Variables
+# =============================================================
+
+# ---- Common ----
+purpose: "demo"
+
+# ---- OCI Identity ----
+oci_region: "ap-tokyo-1"                            # REQUIRED: adjust with your preferred OCI region
+oci_compartment_id: "ocid1.compartment.oc1..xxxx"   # REQUIRED: your compartment OCID
+oci_tenancy_id: "ocid1.tenancy.oc1..xxxx"           # REQUIRED: your tenancy OCID (for IAM resources)
+oci_availability_domain: "hoge:AP-TOKYO-1-AD-1"     # REQUIRED: e.g. "IyFQ:AP-TOKYO-1-AD-1"
+
+# ---- Object Storage (replaces S3) ----
+oci_object_storage_namespace: "mytenancynamespace"  # REQUIRED: your tenancy's namespace (oci os ns get)
+oci_bucket_name: "rhel9-bootc"
+oci_dynamic_group_name: "bootc-builders"
+oci_policy_name: "bootc-object-storage-policy"
+
+# ---- Network ----
+oci_vcn_name: "demo_vcn"
+oci_vcn_cidr_block: "10.1.0.0/16"
+oci_subnet_name: "demo_subnet"
+oci_subnet_cidr_block: "10.1.1.0/24"
+oci_igw_name: "demo_igw"
+oci_routetable_name: "demo_rtb"
+oci_securitylist_name: "demo_sl"
+
+# ---- AAP VM ----
+oci_aap_instance_image_id: "ocid1.image.oc1.ap-tokyo-1.xxxx"  # REQUIRED: RHEL image OCID in your region/compartment
+oci_aap_instance_shape: "VM.Standard.E5.Flex"
+oci_aap_shape_config:
+  ocpus: 4
+  memory_in_gbs: 16
+aap_vm_type: "aap"
+aap_vm_name: "aap01"
+
+# ---- Builder VM ----
+oci_builder_instance_image_id: "ocid1.image.oc1.ap-tokyo-1.xxxx"   # REQUIRED: RHEL image OCID (can be same as AAP)
+oci_builder_instance_shape: "VM.Standard.E5.Flex"
+oci_builder_shape_config:
+  ocpus: 2
+  memory_in_gbs: 8
+builder_vm_type: "builder"
+builder_vm_name: "builder01"

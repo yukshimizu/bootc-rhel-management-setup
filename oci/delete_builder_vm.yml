@@ -1,0 +1,38 @@
+---
+- name: Delete Builder VM on OCI
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - oci_region is defined and oci_region | length > 0
+          - oci_compartment_id is defined
+          - builder_vm_name is defined
+        fail_msg: "Required variables not set"
+
+    - name: Get Builder instance info
+      oracle.oci.oci_compute_instance_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        display_name: "{{ builder_vm_name }}"
+        region: "{{ oci_region }}"
+      register: instance_facts
+
+    - name: Filter non-terminated instances
+      ansible.builtin.set_fact:
+        active_instances: >-
+          {{ instance_facts.instances | rejectattr('lifecycle_state', 'equalto', 'TERMINATED') | list }}
+
+    - name: Terminate Builder instance
+      oracle.oci.oci_compute_instance:
+        instance_id: "{{ item.id }}"
+        state: absent
+        preserve_boot_volume: false
+        region: "{{ oci_region }}"
+      loop: "{{ active_instances }}"
+      when: active_instances | length > 0
+
+    - name: Confirm deletion
+      ansible.builtin.debug:
+        msg: "Builder instance '{{ builder_vm_name }}' has been terminated."

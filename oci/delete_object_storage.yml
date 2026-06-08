@@ -1,0 +1,74 @@
+---
+- name: Delete OCI Object Storage Bucket and IAM Resources
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - oci_region is defined and oci_region | length > 0
+          - oci_compartment_id is defined
+          - oci_tenancy_id is defined
+          - oci_object_storage_namespace is defined
+          - oci_bucket_name is defined
+          - oci_dynamic_group_name is defined
+          - oci_policy_name is defined
+        fail_msg: "Required variables not set"
+
+    # ---------------------------------------------------------------
+    # IAM Policy — look up OCID first, then delete
+    # ---------------------------------------------------------------
+    - name: Get IAM Policy facts
+      oracle.oci.oci_identity_policy_facts:
+        compartment_id: "{{ oci_tenancy_id }}"
+        name: "{{ oci_policy_name }}"
+        region: "{{ oci_region }}"
+      register: policy_facts
+      ignore_errors: true
+
+    - name: Delete IAM Policy
+      oracle.oci.oci_identity_policy:
+        policy_id: "{{ policy_facts.policies[0].id }}"
+        state: absent
+        region: "{{ oci_region }}"
+      when:
+        - policy_facts.policies is defined
+        - policy_facts.policies | length > 0
+      ignore_errors: true
+
+    # ---------------------------------------------------------------
+    # Dynamic Group — look up OCID first, then delete
+    # ---------------------------------------------------------------
+    - name: Get Dynamic Group facts
+      oracle.oci.oci_identity_dynamic_group_facts:
+        compartment_id: "{{ oci_tenancy_id }}"
+        name: "{{ oci_dynamic_group_name }}"
+        region: "{{ oci_region }}"
+      register: dg_facts
+      ignore_errors: true
+
+    - name: Delete Dynamic Group
+      oracle.oci.oci_identity_dynamic_group:
+        dynamic_group_id: "{{ dg_facts.dynamic_groups[0].id }}"
+        state: absent
+        region: "{{ oci_region }}"
+      when:
+        - dg_facts.dynamic_groups is defined
+        - dg_facts.dynamic_groups | length > 0
+      ignore_errors: true
+
+    # ---------------------------------------------------------------
+    # Object Storage bucket
+    # ---------------------------------------------------------------
+    - name: Delete Object Storage bucket
+      oracle.oci.oci_object_storage_bucket:
+        namespace_name: "{{ oci_object_storage_namespace }}"
+        name: "{{ oci_bucket_name }}"
+        state: absent
+        region: "{{ oci_region }}"
+      ignore_errors: true
+
+    - name: Confirm deletion
+      ansible.builtin.debug:
+        msg: "OCI Object Storage and IAM resources have been removed."
